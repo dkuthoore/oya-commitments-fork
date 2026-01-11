@@ -1,0 +1,17 @@
+export DEPLOYER_PK=...
+export OG_COLLATERAL=0x...           # e.g., a UMA-approved collateral token (must be whitelisted) :contentReference[oaicite:17]{index=17}
+export OG_BOND_AMOUNT=1000000        # in token units (depends on decimals)
+export OG_LIVENESS=172800            # 2 days in seconds
+export OG_RULES="Only pay invoices for vendor X; max $50k/month; no delegatecalls; ..."
+
+# Optional overrides (recommended off-mainnet):
+# export SAFE_SINGLETON=...
+# export SAFE_PROXY_FACTORY=...
+# export SAFE_FALLBACK_HANDLER=...
+# export OG_MASTER_COPY=...
+# export MODULE_PROXY_FACTORY=...     # if you already have one deployed
+
+forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimisticGovernor \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  -vv
