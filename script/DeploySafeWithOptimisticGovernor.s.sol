@@ -103,32 +103,68 @@ contract DeploySafeWithOptimisticGovernor is Script {
     // Safe tx operation enum
     uint8 internal constant OP_CALL = 0;
 
+    struct Config {
+        address safeSingleton;
+        address safeProxyFactory;
+        address safeFallbackHandler;
+        address ogMasterCopy;
+        address collateral;
+        uint256 bondAmount;
+        uint64 liveness;
+        bytes32 identifier;
+        uint256 safeSaltNonce;
+        uint256 ogSaltNonce;
+    }
+
     function run() external {
         // ---------
         // Required
         // ---------
         uint256 DEPLOYER_PK = vm.envUint("DEPLOYER_PK");
+        Config memory config = loadConfig();
+        string memory rules = vm.envString("OG_RULES");
 
+        // safe owners config (script is designed for 1-owner bootstrap so it can auto-exec enableModule)
+        // You can later rotate owners/threshold via a Safe tx or by proposing through OG.
+        address deployer = vm.addr(DEPLOYER_PK);
+        address[] memory owners = new address[](1);
+        owners[0] = deployer;
+        uint256 threshold = 1;
+
+        vm.startBroadcast(DEPLOYER_PK);
+
+        address moduleProxyFactory = resolveModuleProxyFactory();
+        address safeProxy = deploySafeProxy(config, owners, threshold);
+        address ogModule = deployOptimisticGovernor(config, moduleProxyFactory, safeProxy, rules);
+
+        enableModule(DEPLOYER_PK, safeProxy, ogModule);
+
+        vm.stopBroadcast();
+
+        logDeployment(moduleProxyFactory, safeProxy, ogModule, config);
+    }
+
+    function loadConfig() internal returns (Config memory config) {
         // ------------
         // Addresses (override these per network)
         // ------------
-        address SAFE_SINGLETON = vm.envOr(
+        config.safeSingleton = vm.envOr(
             "SAFE_SINGLETON",
             address(0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552) // Safe v1.3.0 singleton :contentReference[oaicite:9]{index=9}
         );
 
-        address SAFE_PROXY_FACTORY = vm.envOr(
+        config.safeProxyFactory = vm.envOr(
             "SAFE_PROXY_FACTORY",
             address(0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2) // Safe v1.3.0 proxy factory :contentReference[oaicite:10]{index=10}
         );
 
-        address SAFE_FALLBACK_HANDLER = vm.envOr(
+        config.safeFallbackHandler = vm.envOr(
             "SAFE_FALLBACK_HANDLER",
-            address(0xf48f2B2d2a534e402487b3ee7c18c33Aec0Fe5e4) // CompatibilityFallbackHandler 1.3.0 :contentReference[oaicite:11]{index=11}
+            address(0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4) // CompatibilityFallbackHandler 1.3.0 :contentReference[oaicite:11]{index=11}
         );
 
         // UMA OptimisticGovernor mastercopy (mainnet). Override on other chains.
-        address OG_MASTER_COPY = vm.envOr(
+        config.ogMasterCopy = vm.envOr(
             "OG_MASTER_COPY",
             address(0x28CeBFE94a03DbCA9d17143e9d2Bd1155DC26D5d) // :contentReference[oaicite:12]{index=12}
         );
@@ -136,64 +172,67 @@ contract DeploySafeWithOptimisticGovernor is Script {
         // ------------
         // Governance params
         // ------------
-        address COLLATERAL = vm.envAddress("OG_COLLATERAL"); // must be UMA-whitelisted or setUp will revert :contentReference[oaicite:13]{index=13}
-        uint256 BOND_AMOUNT = vm.envUint("OG_BOND_AMOUNT");
-        uint64 LIVENESS = uint64(vm.envOr("OG_LIVENESS", uint256(2 days))); // seconds
-        string memory RULES = vm.envString("OG_RULES");
+        config.collateral = vm.envAddress("OG_COLLATERAL"); // must be UMA-whitelisted or setUp will revert :contentReference[oaicite:13]{index=13}
+        config.bondAmount = vm.envUint("OG_BOND_AMOUNT");
+        config.liveness = uint64(vm.envOr("OG_LIVENESS", uint256(2 days))); // seconds
 
         // Identifier (bytes32). Default "ZODIAC" (commonly used for OG). :contentReference[oaicite:14]{index=14}
-        string memory IDENTIFIER_STR = vm.envOr("OG_IDENTIFIER_STR", string("ZODIAC"));
-        bytes32 IDENTIFIER = bytes32(bytes(IDENTIFIER_STR)); // "ZODIAC" fits in 32 bytes.
+        string memory identifierStr = vm.envOr("OG_IDENTIFIER_STR", string("ZODIAC"));
+        config.identifier = bytes32(bytes(identifierStr)); // "ZODIAC" fits in 32 bytes.
 
         // salts
-        uint256 SAFE_SALT_NONCE = vm.envOr("SAFE_SALT_NONCE", uint256(1));
-        uint256 OG_SALT_NONCE = vm.envOr("OG_SALT_NONCE", uint256(1));
+        config.safeSaltNonce = vm.envOr("SAFE_SALT_NONCE", uint256(1));
+        config.ogSaltNonce = vm.envOr("OG_SALT_NONCE", uint256(1));
+    }
 
-        // safe owners config (script is designed for 1-owner bootstrap so it can auto-exec enableModule)
-        // You can later rotate owners/threshold via a Safe tx or by proposing through OG.
-        address deployer = vm.addr(DEPLOYER_PK);
-        address;
-        owners[0] = deployer;
-        uint256 threshold = 1;
-
-        vm.startBroadcast(DEPLOYER_PK);
-
+    function resolveModuleProxyFactory() internal returns (address moduleProxyFactory) {
         // 1) Deploy (or use) ModuleProxyFactory
         //    (You can also set MODULE_PROXY_FACTORY env and skip deployment if you prefer.)
-        address MODULE_PROXY_FACTORY = vm.envOr("MODULE_PROXY_FACTORY", address(0));
-        if (MODULE_PROXY_FACTORY == address(0)) {
+        moduleProxyFactory = vm.envOr("MODULE_PROXY_FACTORY", address(0));
+        if (moduleProxyFactory == address(0)) {
             ModuleProxyFactory mpf = new ModuleProxyFactory();
-            MODULE_PROXY_FACTORY = address(mpf);
+            moduleProxyFactory = address(mpf);
         }
+    }
 
-        // 2) Deploy Safe proxy
+    function deploySafeProxy(Config memory config, address[] memory owners, uint256 threshold)
+        internal
+        returns (address safeProxy)
+    {
         bytes memory safeInitializer = abi.encodeWithSelector(
             ISafe.setup.selector,
             owners,
             threshold,
             address(0), // to
             bytes(""),  // data
-            SAFE_FALLBACK_HANDLER,
+            config.safeFallbackHandler,
             address(0), // paymentToken
             0,          // payment
             payable(address(0)) // paymentReceiver
         );
 
-        address safeProxy = ISafeProxyFactory(SAFE_PROXY_FACTORY).createProxyWithNonce(
-            SAFE_SINGLETON,
+        safeProxy = ISafeProxyFactory(config.safeProxyFactory).createProxyWithNonce(
+            config.safeSingleton,
             safeInitializer,
-            SAFE_SALT_NONCE
+            config.safeSaltNonce
         );
+    }
 
+    function deployOptimisticGovernor(
+        Config memory config,
+        address moduleProxyFactory,
+        address safeProxy,
+        string memory rules
+    ) internal returns (address ogModule) {
         // 3) Deploy OptimisticGovernor instance (as module proxy) and initialize via setUp(bytes)
         // setUp decodes: (owner, collateral, bondAmount, rules, identifier, liveness) :contentReference[oaicite:16]{index=16}
         bytes memory ogInitParams = abi.encode(
             safeProxy,
-            COLLATERAL,
-            BOND_AMOUNT,
-            RULES,
-            IDENTIFIER,
-            LIVENESS
+            config.collateral,
+            config.bondAmount,
+            rules,
+            config.identifier,
+            config.liveness
         );
 
         bytes memory ogInitializerCall = abi.encodeWithSignature(
@@ -201,12 +240,14 @@ contract DeploySafeWithOptimisticGovernor is Script {
             ogInitParams
         );
 
-        address ogModule = IModuleProxyFactory(MODULE_PROXY_FACTORY).deployModule(
-            OG_MASTER_COPY,
+        ogModule = IModuleProxyFactory(moduleProxyFactory).deployModule(
+            config.ogMasterCopy,
             ogInitializerCall,
-            OG_SALT_NONCE
+            config.ogSaltNonce
         );
+    }
 
+    function enableModule(uint256 deployerPk, address safeProxy, address ogModule) internal {
         // 4) Enable the module on the Safe by executing a Safe tx:
         // Safe.enableModule(ogModule) must be called by the Safe itself, so we execTransaction.
         bytes memory enableModuleCalldata = abi.encodeWithSignature(
@@ -228,7 +269,7 @@ contract DeploySafeWithOptimisticGovernor is Script {
             safeNonce
         );
 
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(DEPLOYER_PK, txHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(deployerPk, txHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
         bool ok = safe.execTransaction(
@@ -242,15 +283,23 @@ contract DeploySafeWithOptimisticGovernor is Script {
             sig
         );
         require(ok, "enableModule execTransaction failed");
+    }
 
-        vm.stopBroadcast();
-
+    function logDeployment(
+        address moduleProxyFactory,
+        address safeProxy,
+        address ogModule,
+        Config memory config
+    ) internal {
         console2.log("=== Deployed ===");
-        console2.log("ModuleProxyFactory:", MODULE_PROXY_FACTORY);
+        console2.log("ModuleProxyFactory:", moduleProxyFactory);
         console2.log("Safe:", safeProxy);
         console2.log("OptimisticGovernor module:", ogModule);
-        console2.logBytes32("Identifier(bytes32):", IDENTIFIER);
-        console2.logUint("Bond amount:", BOND_AMOUNT);
-        console2.logUint("Liveness(seconds):", uint256(LIVENESS));
+        console2.log("Identifier(bytes32):");
+        console2.logBytes32(config.identifier);
+        console2.log("Bond amount:");
+        console2.logUint(config.bondAmount);
+        console2.log("Liveness(seconds):");
+        console2.logUint(uint256(config.liveness));
     }
 }
