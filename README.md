@@ -90,3 +90,39 @@ forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimis
   --broadcast \
   --private-key <your_private_key>
 ```
+
+## Network Env Files
+
+You can keep per-network env files and load them with a tool like `dotenvx` or `direnv`.
+
+Mainnet fork example (`.env.mainnet`):
+
+```ini
+MAINNET_RPC_URL=...
+DEPLOYER_PK=0x...
+OG_COLLATERAL=0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+OG_BOND_AMOUNT=1000000
+OG_RULES="Contributors must submit weekly updates. Funds are releasable after 7 days of no challenge."
+```
+
+Sepolia example (`.env.sepolia`):
+
+```ini
+SEPOLIA_RPC_URL=...
+DEPLOYER_PK=0x...
+SAFE_SINGLETON=0x...
+SAFE_PROXY_FACTORY=0x...
+SAFE_FALLBACK_HANDLER=0x...
+OG_MASTER_COPY=0x...
+OG_COLLATERAL=0x...
+OG_BOND_AMOUNT=...
+OG_RULES="..."
+```
+
+Load the file before running the script:
+
+```shell
+dotenvx run -f .env.mainnet -- forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimisticGovernor \
+  --rpc-url $MAINNET_RPC_URL \
+  --private-key $DEPLOYER_PK
+```
