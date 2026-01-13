@@ -43,7 +43,7 @@ forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimis
 DEPLOYER_PK=0xabc123...
 OG_COLLATERAL=0x1111111111111111111111111111111111111111
 OG_BOND_AMOUNT=1000000000000000000
-OG_RULES="Contributors must submit weekly updates. Funds are releasable after 7 days of no challenge."
+OG_RULES="Any assets deposited in this Commitment may be transferred back to the depositor before January 15th, 2026 (12:00AM PST). After January 15th, assets may only be transferred to jdshutt.eth. If a third party is initiating the transfer, they may take a 10% cut of the assets being transferred as a fee."
 
 # Safe overrides
 SAFE_OWNERS=0x2222222222222222222222222222222222222222,0x3333333333333333333333333333333333333333
