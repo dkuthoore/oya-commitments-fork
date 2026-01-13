@@ -91,6 +91,23 @@ forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimis
   --private-key <your_private_key>
 ```
 
+### Anvil Test Key + USDC Funding (Fork)
+
+Start Anvil with the default test mnemonic and grab one of the printed private keys:
+
+```shell
+anvil --fork-url $MAINNET_RPC_URL --mnemonic "test test test test test test test test test test test junk"
+```
+
+Fund the test account with USDC by impersonating a whale on the fork:
+
+```shell
+cast rpc anvil_impersonateAccount <whale_address>
+cast rpc anvil_setBalance <whale_address> 0x3635C9ADC5DEA00000
+cast send <usdc_contract> "transfer(address,uint256)" <your_account> <amount> --from <whale_address>
+cast rpc anvil_stopImpersonatingAccount <whale_address>
+```
+
 ## Network Env Files
 
 You can keep per-network env files and load them with a tool like `dotenvx` or `direnv`.
