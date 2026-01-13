@@ -94,10 +94,8 @@ contract OptimisticGovernorMock {
     uint64 public liveness;
 
     function setUp(bytes memory data) external {
-        (owner, collateral, bondAmount, rules, identifier, liveness) = abi.decode(
-            data,
-            (address, address, uint256, string, bytes32, uint64)
-        );
+        (owner, collateral, bondAmount, rules, identifier, liveness) =
+            abi.decode(data, (address, address, uint256, string, bytes32, uint64));
     }
 }
 

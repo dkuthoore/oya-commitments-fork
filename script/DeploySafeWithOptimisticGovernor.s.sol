@@ -8,11 +8,9 @@ import "forge-std/Script.sol";
 /// ------------------------
 
 interface ISafeProxyFactory {
-    function createProxyWithNonce(
-        address singleton,
-        bytes memory initializer,
-        uint256 saltNonce
-    ) external returns (address proxy);
+    function createProxyWithNonce(address singleton, bytes memory initializer, uint256 saltNonce)
+        external
+        returns (address proxy);
 }
 
 interface ISafe {
@@ -57,11 +55,9 @@ interface ISafe {
 }
 
 interface IModuleProxyFactory {
-    function deployModule(
-        address masterCopy,
-        bytes calldata initializer,
-        uint256 saltNonce
-    ) external returns (address proxy);
+    function deployModule(address masterCopy, bytes calldata initializer, uint256 saltNonce)
+        external
+        returns (address proxy);
 }
 
 /// ------------------------
@@ -77,11 +73,8 @@ contract ModuleProxyFactory {
 
     function createProxy(address target, bytes32 salt) internal returns (address result) {
         if (target == address(0)) revert ZeroAddress(target);
-        bytes memory deployment = abi.encodePacked(
-            hex"602d8060093d393df3363d3d373d3d3d363d73",
-            target,
-            hex"5af43d82803e903d91602b57fd5bf3"
-        );
+        bytes memory deployment =
+            abi.encodePacked(hex"602d8060093d393df3363d3d373d3d3d363d73", target, hex"5af43d82803e903d91602b57fd5bf3");
         assembly {
             result := create2(0, add(deployment, 0x20), mload(deployment), salt)
         }
@@ -204,18 +197,15 @@ contract DeploySafeWithOptimisticGovernor is Script {
             owners,
             threshold,
             address(0), // to
-            bytes(""),  // data
+            bytes(""), // data
             config.safeFallbackHandler,
             address(0), // paymentToken
-            0,          // payment
+            0, // payment
             payable(address(0)) // paymentReceiver
         );
 
-        safeProxy = ISafeProxyFactory(config.safeProxyFactory).createProxyWithNonce(
-            config.safeSingleton,
-            safeInitializer,
-            config.safeSaltNonce
-        );
+        safeProxy = ISafeProxyFactory(config.safeProxyFactory)
+            .createProxyWithNonce(config.safeSingleton, safeInitializer, config.safeSaltNonce);
     }
 
     function deployOptimisticGovernor(
@@ -226,46 +216,33 @@ contract DeploySafeWithOptimisticGovernor is Script {
     ) internal returns (address ogModule) {
         // 3) Deploy OptimisticGovernor instance (as module proxy) and initialize via setUp(bytes)
         // setUp decodes: (owner, collateral, bondAmount, rules, identifier, liveness) :contentReference[oaicite:16]{index=16}
-        bytes memory ogInitParams = abi.encode(
-            safeProxy,
-            config.collateral,
-            config.bondAmount,
-            rules,
-            config.identifier,
-            config.liveness
-        );
+        bytes memory ogInitParams =
+            abi.encode(safeProxy, config.collateral, config.bondAmount, rules, config.identifier, config.liveness);
 
-        bytes memory ogInitializerCall = abi.encodeWithSignature(
-            "setUp(bytes)",
-            ogInitParams
-        );
+        bytes memory ogInitializerCall = abi.encodeWithSignature("setUp(bytes)", ogInitParams);
 
-        ogModule = IModuleProxyFactory(moduleProxyFactory).deployModule(
-            config.ogMasterCopy,
-            ogInitializerCall,
-            config.ogSaltNonce
-        );
+        ogModule = IModuleProxyFactory(moduleProxyFactory)
+            .deployModule(config.ogMasterCopy, ogInitializerCall, config.ogSaltNonce);
     }
 
     function enableModule(uint256 deployerPk, address safeProxy, address ogModule) internal {
         // 4) Enable the module on the Safe by executing a Safe tx:
         // Safe.enableModule(ogModule) must be called by the Safe itself, so we execTransaction.
-        bytes memory enableModuleCalldata = abi.encodeWithSignature(
-            "enableModule(address)",
-            ogModule
-        );
+        bytes memory enableModuleCalldata = abi.encodeWithSignature("enableModule(address)", ogModule);
 
         ISafe safe = ISafe(safeProxy);
         uint256 safeNonce = safe.nonce();
 
         bytes32 txHash = safe.getTransactionHash(
-            safeProxy,                 // to = safe itself
-            0,                        // value
-            enableModuleCalldata,     // data
-            OP_CALL,                  // operation
-            0, 0, 0,                  // safeTxGas, baseGas, gasPrice
-            address(0),               // gasToken
-            address(0),               // refundReceiver
+            safeProxy, // to = safe itself
+            0, // value
+            enableModuleCalldata, // data
+            OP_CALL, // operation
+            0,
+            0,
+            0, // safeTxGas, baseGas, gasPrice
+            address(0), // gasToken
+            address(0), // refundReceiver
             safeNonce
         );
 
@@ -273,24 +250,14 @@ contract DeploySafeWithOptimisticGovernor is Script {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         bool ok = safe.execTransaction(
-            safeProxy,
-            0,
-            enableModuleCalldata,
-            OP_CALL,
-            0, 0, 0,
-            address(0),
-            payable(address(0)),
-            sig
+            safeProxy, 0, enableModuleCalldata, OP_CALL, 0, 0, 0, address(0), payable(address(0)), sig
         );
         require(ok, "enableModule execTransaction failed");
     }
 
-    function logDeployment(
-        address moduleProxyFactory,
-        address safeProxy,
-        address ogModule,
-        Config memory config
-    ) internal {
+    function logDeployment(address moduleProxyFactory, address safeProxy, address ogModule, Config memory config)
+        internal
+    {
         console2.log("=== Deployed ===");
         console2.log("ModuleProxyFactory:", moduleProxyFactory);
         console2.log("Safe:", safeProxy);
