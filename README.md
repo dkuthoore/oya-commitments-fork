@@ -69,3 +69,24 @@ forge build
 forge test
 forge fmt
 ```
+
+## Local Testing
+
+Dry-run (no broadcast):
+
+```shell
+anvil
+forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimisticGovernor \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key <your_private_key>
+```
+
+Broadcast on Anvil:
+
+```shell
+anvil
+forge script script/DeploySafeWithOptimisticGovernor.s.sol:DeploySafeWithOptimisticGovernor \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast \
+  --private-key <your_private_key>
+```
