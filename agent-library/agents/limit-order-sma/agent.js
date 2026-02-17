@@ -412,6 +412,13 @@ async function validateToolCalls({
         args.actions[0] = action;
 
         const { ethPriceUSD, smaEth200USD } = await fetchEthPriceDataFromCoinGecko();
+        if (
+            smaEth200USD == null ||
+            !Number.isFinite(smaEth200USD) ||
+            !Number.isFinite(ethPriceUSD)
+        ) {
+            throw new Error('SMA or price data unavailable; cannot validate condition.');
+        }
         if (ethPriceUSD > smaEth200USD) {
             throw new Error(
                 `SMA condition not met: ethPriceUSD ${ethPriceUSD} > smaEth200USD ${smaEth200USD}`
