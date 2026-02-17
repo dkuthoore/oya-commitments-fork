@@ -437,7 +437,6 @@ function onProposalEvents({ executedProposalCount = 0, deletedProposalCount = 0 
 
 async function reconcileProposalSubmission({ publicClient, ogModule, startBlock }) {
     if (!hydratedFromChain && ogModule) {
-        hydratedFromChain = true;
         try {
             const toBlock = await publicClient.getBlockNumber();
             const fromBlock = startBlock ?? 0n;
@@ -454,6 +453,7 @@ async function reconcileProposalSubmission({ publicClient, ogModule, startBlock 
                 limitOrderState.proposalSubmitHash = null;
                 limitOrderState.proposalSubmitMs = null;
             }
+            hydratedFromChain = true;
         } catch (err) {
             console.warn('[limit-order] Failed to hydrate from chain:', err?.message ?? err);
         }
