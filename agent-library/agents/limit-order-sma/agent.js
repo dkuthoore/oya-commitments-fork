@@ -411,6 +411,13 @@ async function validateToolCalls({
         action.amountOutMinWei = minAmountOut.toString();
         args.actions[0] = action;
 
+        const { ethPriceUSD, smaEth200USD } = await fetchEthPriceDataFromCoinGecko();
+        if (ethPriceUSD > smaEth200USD) {
+            throw new Error(
+                `SMA condition not met: ethPriceUSD ${ethPriceUSD} > smaEth200USD ${smaEth200USD}`
+            );
+        }
+
         validated.push({ ...call, parsedArguments: args });
     }
 
